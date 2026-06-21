@@ -304,10 +304,10 @@ IOT_Kipas/
 <div align="center">
            
 **© 2026 UcokPLC — All Rights Reserved**  
-*IoT Project | ESP32 × MQTT × Web Dashboard*
-
+*IoT Project | ESP32 × MQTT × Web Dashboard*<br>
+*Dibuat dengan ❤️ — Semoga tugasnya lancar!*
 </div>
 
 ---
 
-*Dibuat dengan ❤️ — Semoga tugasnya lancar!*
+
