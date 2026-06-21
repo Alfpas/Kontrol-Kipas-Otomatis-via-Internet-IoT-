@@ -301,10 +301,12 @@ IOT_Kipas/
 ```
 
 ---
+<div align="center">
+           
+**© 2026 UcokPLC — All Rights Reserved**  
+*IoT Project | ESP32 × MQTT × Web Dashboard*
 
-## 👨‍💻 Tentang Proyek
-
-Proyek ini dibuat sebagai tugas mata kuliah yang memanfaatkan teknologi **Internet of Things (IoT)** untuk mengendalikan perangkat rumah tangga secara nirkabel melalui internet menggunakan protokol MQTT dan mikrokontroler ESP32.
+</div>
 
 ---
 
