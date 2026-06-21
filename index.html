@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kontrol Kipas — ESP32 Relay Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+<style>
+  :root {
+    --bg: #11151a;
+    --bg-grid: #161b21;
+    --panel: #1b2128;
+    --panel-soft: #1f262e;
+    --border: #2a323b;
+    --border-soft: #232a32;
+    --text-hi: #f2f4f6;
+    --text-mid: #9aa5b1;
+    --text-dim: #5c6670;
+    --copper: #e08a4f;
+    --copper-dim: #6b4a30;
+    --teal: #3cc6bd;
+    --teal-dim: #1d4541;
+    --red: #e1564c;
+    --red-dim: #4a2622;
+    --focus: #6fb8ff;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background:
+      radial-gradient(circle at 18% 0%, rgba(60,198,189,0.07), transparent 45%),
+      radial-gradient(circle at 85% 100%, rgba(224,138,79,0.06), transparent 45%),
+      var(--bg);
+    color: var(--text-hi);
+    font-family: 'Inter', sans-serif;
+    padding: 48px 24px 64px;
+    display: flex;
+    justify-content: center;
+  }
+
+  .wrap { width: 100%; max-width: 920px; }
+
+  /* ---------- header ---------- */
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 36px;
+    flex-wrap: wrap;
+  }
+
+  .eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    letter-spacing: 0.14em;
+    color: var(--copper);
+    text-transform: uppercase;
+    margin: 0 0 10px;
+  }
+
+  h1 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 30px;
+    font-weight: 700;
+    margin: 0 0 10px;
+    letter-spacing: -0.01em;
+  }
+
+  .topics {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--text-mid);
+  }
+
+  .topic-pill {
+    border: 1px solid var(--border);
+    background: var(--panel-soft);
+    border-radius: 6px;
+    padding: 4px 9px;
+  }
+
+  .conn-pill {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    border-radius: 999px;
+    padding: 7px 14px 7px 11px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12.5px;
+    color: var(--text-mid);
+    white-space: nowrap;
+  }
+
+  .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--text-dim);
+    box-shadow: 0 0 0 0 transparent;
+    transition: background .3s, box-shadow .3s;
+  }
+  .conn-pill.live .dot {
+    background: var(--teal);
+    box-shadow: 0 0 0 4px rgba(60,198,189,0.18);
+  }
+  .conn-pill.bad .dot {
+    background: var(--red);
+    box-shadow: 0 0 0 4px rgba(225,86,76,0.18);
+  }
+
+  /* ---------- main grid ---------- */
+  main {
+    display: grid;
+    grid-template-columns: 1fr 1.05fr;
+    gap: 20px;
+  }
+
+  @media (max-width: 760px) {
+    main { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px;
+  }
+
+  .panel-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin: 0 0 20px;
+  }
+
+  /* ---------- control card ---------- */
+  .control-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .fan-stage {
+    width: 168px;
+    height: 168px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 50% 38%, #232b33, #181e24 72%);
+    border: 1px solid var(--border-soft);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 6px;
+    position: relative;
+  }
+
+  .fan-stage::after {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: 50%;
+    border: 1px solid transparent;
+    box-shadow: 0 0 0 0 rgba(60,198,189,0);
+    transition: box-shadow .4s ease;
+  }
+  .fan-stage.on::after {
+    box-shadow: 0 0 26px 2px rgba(60,198,189,0.22);
+  }
+
+  #fanSvg { width: 118px; height: 118px; transition: filter .3s; filter: saturate(0.55) brightness(0.85); }
+  .fan-stage.on #fanSvg { filter: none; }
+
+  #fanBlades {
+    transform-origin: 60px 60px;
+  }
+  #fanBlades.spin {
+    animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  .status-text {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 19px;
+    font-weight: 600;
+    margin: 18px 0 2px;
+    letter-spacing: 0.01em;
+  }
+  .status-text.on { color: var(--teal); }
+  .status-text.off { color: var(--text-mid); }
+
+  .status-sub {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-bottom: 26px;
+  }
+
+  .power-btn {
+    width: 76px;
+    height: 76px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    background: var(--panel-soft);
+    color: var(--text-mid);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all .2s ease;
+    margin-bottom: 22px;
+  }
+  .power-btn:hover { border-color: var(--copper); color: var(--copper); }
+  .power-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+  .power-btn.on {
+    border-color: var(--teal);
+    color: var(--teal);
+    background: var(--teal-dim);
+    box-shadow: 0 0 0 6px rgba(60,198,189,0.10);
+  }
+  .power-btn svg { width: 28px; height: 28px; }
+  .power-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .manual-row {
+    display: flex;
+    gap: 10px;
+    width: 100%;
+  }
+  .manual-btn {
+    flex: 1;
+    padding: 11px 0;
+    border-radius: 9px;
+    border: 1px solid var(--border);
+    background: var(--panel-soft);
+    color: var(--text-mid);
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .15s ease;
+  }
+  .manual-btn:hover { color: var(--text-hi); border-color: var(--text-dim); }
+  .manual-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .manual-btn.danger:hover { color: var(--red); border-color: var(--red-dim); }
+  .manual-btn.go:hover { color: var(--teal); border-color: var(--teal-dim); }
+  .manual-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* ---------- log card ---------- */
+  .log-card { display: flex; flex-direction: column; }
+  .log-feed {
+    flex: 1;
+    min-height: 280px;
+    max-height: 360px;
+    overflow-y: auto;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12.5px;
+    line-height: 1.85;
+    padding-right: 4px;
+  }
+  .log-feed::-webkit-scrollbar { width: 6px; }
+  .log-feed::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .log-line { display: flex; gap: 10px; color: var(--text-mid); }
+  .log-time { color: var(--text-dim); flex-shrink: 0; }
+  .log-line.evt-ok .log-msg { color: var(--teal); }
+  .log-line.evt-bad .log-msg { color: var(--red); }
+  .log-line.evt-pub .log-msg { color: var(--copper); }
+  .log-line.evt-info .log-msg { color: var(--text-mid); }
+
+  .log-empty { color: var(--text-dim); font-style: italic; }
+
+  /* ---------- footer ---------- */
+  footer {
+    margin-top: 22px;
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    color: var(--text-dim);
+  }
+  footer span { color: var(--text-mid); }
+
+  @media (prefers-reduced-motion: reduce) {
+    #fanBlades.spin { animation: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <header>
+    <div>
+      <p class="eyebrow">ESP32 · RELAY CONTROL · MQTT</p>
+      <h1>Kontrol Kipas</h1>
+      <div class="topics">
+        <span class="topic-pill">pub → kipas/kontrol</span>
+        <span class="topic-pill">sub ← kipas/status</span>
+      </div>
+    </div>
+    <div class="conn-pill" id="connPill">
+      <span class="dot"></span>
+      <span id="connText">Menghubungkan…</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel control-card">
+      <p class="panel-label">Perangkat</p>
+
+      <div class="fan-stage" id="fanStage">
+        <svg id="fanSvg" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="60" cy="60" r="56" stroke="#3a4450" stroke-width="2" stroke-dasharray="2 5"/>
+          <g id="fanBlades">
+            <g>
+              <ellipse cx="60" cy="32" rx="13" ry="22" fill="#3cc6bd"/>
+              <ellipse cx="60" cy="32" rx="13" ry="22" fill="#3cc6bd" transform="rotate(72 60 60)"/>
+              <ellipse cx="60" cy="32" rx="13" ry="22" fill="#3cc6bd" transform="rotate(144 60 60)"/>
+              <ellipse cx="60" cy="32" rx="13" ry="22" fill="#3cc6bd" transform="rotate(216 60 60)"/>
+              <ellipse cx="60" cy="32" rx="13" ry="22" fill="#3cc6bd" transform="rotate(288 60 60)"/>
+            </g>
+          </g>
+          <circle cx="60" cy="60" r="13" fill="#0f1318"/>
+          <circle cx="60" cy="60" r="13" stroke="#4a5460" stroke-width="1.5"/>
+          <circle cx="60" cy="60" r="3.4" fill="#4a5460"/>
+        </svg>
+      </div>
+
+      <p class="status-text off" id="statusText">STATUS TIDAK DIKETAHUI</p>
+      <p class="status-sub" id="statusSub">menunggu pesan pertama</p>
+
+      <button class="power-btn" id="powerBtn" disabled aria-label="Sakelar kipas">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="12" y1="2" x2="12" y2="12"/>
+          <path d="M5.6 6.6a8 8 0 1 0 12.8 0"/>
+        </svg>
+      </button>
+
+      <div class="manual-row">
+        <button class="manual-btn go" id="onBtn" disabled>Nyalakan</button>
+        <button class="manual-btn danger" id="offBtn" disabled>Matikan</button>
+      </div>
+    </section>
+
+    <section class="panel log-card">
+      <p class="panel-label">Log aktivitas</p>
+      <div class="log-feed" id="logFeed">
+        <div class="log-empty">belum ada aktivitas…</div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span id="brokerInfo">broker: —</span>
+    <span>klien: web-dashboard</span>
+  </footer>
+
+</div>
+
+<script>
+  // ---------- konfigurasi: sesuaikan dengan punyamu ----------
+  const MQTT_HOST = "ycdb2f7b.ala.dedicated.aws.emqxcloud.com";
+  const MQTT_PORT = 8084; // WebSocket over TLS/SSL
+  const MQTT_USER = "web_kontrol";
+  const MQTT_PASS = "WebKontrol123!";
+  const TOPIC_CONTROL = "kipas/kontrol";
+  const TOPIC_STATUS  = "kipas/status";
+  // -------------------------------------------------------------
+
+  const els = {
+    connPill: document.getElementById('connPill'),
+    connText: document.getElementById('connText'),
+    fanStage: document.getElementById('fanStage'),
+    fanBlades: document.getElementById('fanBlades'),
+    statusText: document.getElementById('statusText'),
+    statusSub: document.getElementById('statusSub'),
+    powerBtn: document.getElementById('powerBtn'),
+    onBtn: document.getElementById('onBtn'),
+    offBtn: document.getElementById('offBtn'),
+    logFeed: document.getElementById('logFeed'),
+    brokerInfo: document.getElementById('brokerInfo'),
+  };
+
+  els.brokerInfo.textContent = "broker: " + MQTT_HOST;
+
+  let currentState = null; // "ON" | "OFF" | null
+  let lastUpdate = null;
+
+  function timeNow() {
+    const d = new Date();
+    return d.toLocaleTimeString('id-ID', { hour12: false });
+  }
+
+  function log(kind, msg) {
+    const empty = els.logFeed.querySelector('.log-empty');
+    if (empty) empty.remove();
+    const line = document.createElement('div');
+    line.className = 'log-line evt-' + kind;
+    line.innerHTML = `<span class="log-time">${timeNow()}</span><span class="log-msg">${msg}</span>`;
+    els.logFeed.appendChild(line);
+    els.logFeed.scrollTop = els.logFeed.scrollHeight;
+  }
+
+  function setConn(state, label) {
+    els.connPill.classList.remove('live', 'bad');
+    if (state) els.connPill.classList.add(state);
+    els.connText.textContent = label;
+  }
+
+  function setControlsEnabled(enabled) {
+    els.powerBtn.disabled = !enabled;
+    els.onBtn.disabled = !enabled;
+    els.offBtn.disabled = !enabled;
+  }
+
+  function applyState(state) {
+    currentState = state;
+    lastUpdate = new Date();
+    const isOn = state === 'ON';
+
+    els.fanStage.classList.toggle('on', isOn);
+    els.fanBlades.classList.toggle('spin', isOn);
+    els.powerBtn.classList.toggle('on', isOn);
+    els.statusText.classList.toggle('on', isOn);
+    els.statusText.classList.toggle('off', !isOn);
+    els.statusText.textContent = isOn ? 'KIPAS MENYALA' : 'KIPAS MATI';
+    refreshSub();
+  }
+
+  function refreshSub() {
+    if (!lastUpdate) { els.statusSub.textContent = 'menunggu pesan pertama'; return; }
+    els.statusSub.textContent = 'diperbarui ' + lastUpdate.toLocaleTimeString('id-ID', { hour12: false });
+  }
+  setInterval(refreshSub, 5000);
+
+  // ---------- koneksi MQTT ----------
+  setConn(null, 'Menghubungkan…');
+  log('info', 'Menghubungkan ke broker…');
+
+  const client = mqtt.connect(`wss://${MQTT_HOST}:${MQTT_PORT}/mqtt`, {
+    username: MQTT_USER,
+    password: MQTT_PASS,
+    clientId: 'webDashboard_' + Math.random().toString(16).slice(2, 8),
+    reconnectPeriod: 3000,
+  });
+
+  client.on('connect', () => {
+    setConn('live', 'Terhubung');
+    log('ok', 'Terhubung ke broker MQTT');
+    client.subscribe(TOPIC_STATUS, (err) => {
+      if (!err) {
+        log('info', 'Subscribe ke ' + TOPIC_STATUS);
+        setControlsEnabled(true);
+      }
+    });
+  });
+
+  client.on('reconnect', () => {
+    setConn(null, 'Menyambung ulang…');
+  });
+
+  client.on('close', () => {
+    setConn('bad', 'Terputus');
+    setControlsEnabled(false);
+    log('bad', 'Koneksi ke broker ditutup');
+  });
+
+  client.on('error', (err) => {
+    setConn('bad', 'Gagal terhubung');
+    setControlsEnabled(false);
+    log('bad', 'Error: ' + (err && err.message ? err.message : err));
+  });
+
+  client.on('message', (topic, payload) => {
+    const msg = payload.toString();
+    log('info', `Pesan diterima di ${topic}: ${msg}`);
+    if (topic === TOPIC_STATUS && (msg === 'ON' || msg === 'OFF')) {
+      applyState(msg);
+    }
+  });
+
+  function publish(cmd) {
+    client.publish(TOPIC_CONTROL, cmd);
+    log('pub', `Publish "${cmd}" → ${TOPIC_CONTROL}`);
+  }
+
+  els.onBtn.addEventListener('click', () => publish('ON'));
+  els.offBtn.addEventListener('click', () => publish('OFF'));
+  els.powerBtn.addEventListener('click', () => {
+    publish(currentState === 'ON' ? 'OFF' : 'ON');
+  });
+</script>
+
+</body>
+</html>
